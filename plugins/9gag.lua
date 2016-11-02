@@ -1,38 +1,88 @@
-do
+-- Checks if bot was disabled on specific chat
+local function is_channel_disabled( receiver )
+	if not _config.disabled_channels then
+		return false
+	end
 
-local function get_9GAG()
-  local url = "http://api-9gag.herokuapp.com/"
-  local b,c = http.request(url)
-  if c ~= 200 then return nil end
-  local gag = json:decode(b)
-  -- random max json table size
-  local i = math.random(#gag)
-  local link_image = gag[i].src
-  local title = gag[i].title
-  if link_image:sub(0,2) == '//' then
-    link_image = msg.text:sub(3,-1)
-  end
-  return link_image, title
+	if _config.disabled_channels[receiver] == nil then
+		return false
+	end
+
+  return _config.disabled_channels[receiver]
 end
 
-local function send_title(cb_extra, success, result)
-  if success then
-    send_msg(cb_extra[1], cb_extra[2], ok_cb, false)
+local function enable_channel(receiver)
+	if not _config.disabled_channels then
+		_config.disabled_channels = {}
+	end
+
+	if _config.disabled_channels[receiver] == nil then
+		return "Bot is not OFF ❕ "
+	end
+	
+	_config.disabled_channels[receiver] = false
+
+	save_config()
+	return "Bot has turned ON 🔵 "
+end
+
+local function disable_channel( receiver )
+	if not _config.disabled_channels then
+		_config.disabled_channels = {}
+	end
+	
+	_config.disabled_channels[receiver] = true
+
+	save_config()
+	return "Bot has turned OFF 🔴 "
+end
+
+local function pre_process(msg)
+	local receiver = get_receiver(msg)
+	
+	-- If sender is moderator then re-enable the channel
+	if is_sudo(msg) then
+	  if msg.text == "/bot on" or msg.text == "/Bot on" or msg.text == "!bot on" or msg.text == "!Bot on" then
+	  
+	    enable_channel(receiver)
+	  end
+	end
+
+  if is_channel_disabled(receiver) then
+  	msg.text = ""
   end
+
+	return msg
 end
 
 local function run(msg, matches)
-  local receiver = get_receiver(msg)
-  local url, title = get_9GAG()
-  send_photo_from_url(receiver, url, send_title, {receiver, title})
-  return false
+	local receiver = get_receiver(msg)
+	-- Enable a channel
+	
+	local hash = 'usecommands:'..msg.from.id..':'..msg.to.id
+    redis:incr(hash)
+	if not is_sudo(msg) then
+	return nil
+	end
+	if matches[1] == 'on' then
+		return enable_channel(receiver)
+	end
+	-- Disable a channel
+	if matches[1] == 'off' then
+		return disable_channel(receiver)
+	end
 end
 
 return {
-  description = "9GAG for Telegram",
-  usage = "!9gag: Send random image from 9gag",
-  patterns = {"^!9gag$"},
-  run = run
+	description = "Plugin to manage channels. Enable or disable channel.", 
+	usage = {
+		"/channel enable: enable current channel",
+		"/channel disable: disable current channel" },
+	patterns = {
+		"^[!/][Bb]ot (on)",
+		"^[!/][Bb]ot (off)" }, 
+	run = run,
+	--privileged = true,
+	moderated = true,
+	pre_process = pre_process
 }
-
-end
